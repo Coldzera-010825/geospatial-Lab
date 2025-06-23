@@ -1,0 +1,350 @@
+
+---
+title: "可视化报告 —— R 脚本转换示例"
+author: "cold"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+> 本 .Rmd 由原始 **visualization.R** 脚本自动转换生成。每个可视化前均附中文简介，方便直接 Knit。如需更改数据路径或参数，请在对应代码块顶部调整。
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+## 0  环境准备
+
+以下代码安装并加载所需 R 包；安装命令默认 `eval = FALSE`，首次运行请取消注释。
+
+```{r packages, eval=FALSE}
+# install.packages('devtools')
+# install.packages(c('ggalluvial','reshape2','tidyr','dplyr','RColorBrewer',
+#                    'gghalves','corrplot','ggcorrplot','ggthemes','ggplot2',
+#                    'readxl','tidyverse','factoextra','dendextend','circlize',
+#                    'rvcheck','ggsankey'))
+# devtools::install_github('davidsjoberg/ggsankey')
+```
+
+```{r libraries}
+library(rvcheck)
+library(ggcorrplot)
+library(ggplot2)
+library(ggthemes)
+library(ggalluvial)
+#library(ggsankey)
+library(reshape2)
+library(tidyr)
+library(dplyr)
+library(RColorBrewer)
+library(gghalves)
+library(corrplot)
+library(readxl)
+library(tidyverse)
+#library(factoextra)
+#library(dendextend)
+#library(circlize)
+```
+
+## 1  R 版本与包更新检查
+
+> **rvcheck** 检测 R 自身及已安装包是否有更新。
+
+```{r rvcheck}
+rvcheck::check_r()
+rvcheck::update_all(check_R = FALSE, which = c('CRAN','BioC','github'))
+```
+
+---
+
+## 2  示例相关性矩阵热力图
+
+> 使用 `ggcorrplot` 绘制 4×4 相关性矩阵（上三角），蓝‑白‑红渐变表示相关系数由负到正。
+
+```{r demo-corrplot}
+cor_matrix <- matrix(c(
+  1, -0.5, 0.3, 0.2,
+  -0.5,  1, -0.6, 0.1,
+   0.3, -0.6, 1,   0.4,
+   0.2,  0.1, 0.4, 1
+), nrow = 4, byrow = TRUE,
+dimnames = list(c('mpg','cyl','disp','hp'),
+                c('mpg','cyl','disp','hp')))
+
+ggcorrplot(cor_matrix,
+           method   = 'circle',
+           type     = 'upper',
+           lab      = TRUE,
+           lab_size = 3,
+           colors   = c('blue','white','red'))
+```
+
+---
+
+## 3  Excel 数据相关性热力图
+
+> 读取 Excel 中的相关性矩阵，计算 *p*-值并在不显著单元格留空。配色采用马卡龙色系。
+
+```{r excel-corrplot}
+file_path <- 'G:/18keyan/picture/1.xlsx'  # 修改为实际路径
+
+correlation_data <- read_excel(file_path, sheet = 'Sheet9', range = 'B1:H8')
+row_titles <- read_excel(file_path, sheet = 'Sheet9', range = 'A1:A8')[[1]]
+col_titles <- row_titles
+rownames(correlation_data) <- row_titles; colnames(correlation_data) <- col_titles
+
+p.mat <- round(cor_pmat(t(correlation_data)), 3)
+macaron_colors <- c('#E4CDA7','#C6DEF1','#D8A7B1','#BFD8AF')
+
+ggcorrplot(correlation_data, method='circle', type='full',
+           lab = TRUE, lab_size = 5, outline.col='white',
+           tl.cex = 14, ggtheme = theme_bw(),
+           colors = macaron_colors, p.mat=p.mat, insig='blank')
+```
+
+---
+
+## 4  层次聚类树状图
+
+### 4.1  直角树状图
+
+> `mtcars` 归一化 + 欧氏距离 + Ward.D2 聚类，矩形框区分 4 类。
+
+```{r dendro-rect}
+library(tidyverse)
+library(factoextra)
+dd <-  mtcars %>% scale() %>% dist(method = "euclidean")
+hc <- hclust(dd, method = "ward.D2")
+
+```
+
+### 4.2  圆形树状图
+
+> 相同聚类结果以放射状展示，易观察整体层级关系。
+
+```{r dendro-circ}
+par(mar = rep(300,4))
+fviz_dend(hc, cex = 1.0, k = 4, 
+          color_labels_by_k = FALSE, # 数据标签也根据颜色设定
+          k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+          type = "circular",#phylogenic",
+          labels_track_height = 0.1,
+          repel = TRUE,
+          rect_lty = 0.3)
+```
+
+---
+
+## 5  因子权重可视化
+
+### 5.1  箱线图 + 抖动
+
+> 展示 4 种指标的分布，并叠加各因子散点。
+
+```{r box-jitter, eval=FALSE}
+# 假设 clean_data 已生成
+df_long <- reshape2::melt(clean_data, id.vars='Factor',
+                          measure.vars = c('Zero_Order','Partial','importance','Tolerance_Trans'))
+df_long$value <- as.numeric(df_long$value)
+soft_cols <- c('#B5C4B1','#D6A2AD','#A7C7E7','#E6CBA8','#C3B1E1')
+
+ggplot(df_long, aes(variable, value, fill=variable)) +
+  geom_boxplot(alpha=.5, outlier.shape = NA) +
+  geom_jitter(aes(color=Factor), width=.2, size=2) +
+  scale_fill_manual(values=c('#E4CDA7','#C6DEF1','#D8A7B1','#BFD8AF')) +
+  scale_color_manual(values=soft_cols) +
+  theme_bw() + xlab('指标') + ylab('得分')
+```
+
+### 5.2  绘制条形图 + 误差线 + 数据点
+
+```{r }
+fac_data <- read_excel(file_path, sheet=10)
+fac_data$权重计算方法[2:6]  <- '分类回归'
+fac_data$权重计算方法[7:9]  <- '熵权法'
+fac_data$权重计算方法[10:11] <- '自定义'
+
+df_clean <- fac_data %>% select(权重计算方法, 因子权重) %>% filter(!is.na(权重计算方法))
+
+# 计算均值和标准差
+df_summary <- df_clean %>%
+  group_by(权重计算方法) %>%
+  summarise(
+    平均因子权重 = mean(因子权重, na.rm = TRUE),
+    标准差 = sd(因子权重, na.rm = TRUE)
+  )
+
+
+ggplot(df_summary, aes(x = `权重计算方法`, y = `平均因子权重`, fill = `权重计算方法`)) +
+  geom_bar(stat = "identity", alpha = 0.8, width = 0.6) +  # 条形图
+  geom_errorbar(aes(ymin = 平均因子权重 - 标准差, ymax = 平均因子权重 + 标准差),
+                width = 0.2, size = 1, color = "black") +  # 误差线
+  geom_jitter(data = df_clean, aes(x = `权重计算方法`, y = `因子权重`), 
+              width = 0, shape = 21, size = 4.5, alpha = 0.8, color = "black") +  # 数据点
+  xlab("权重计算方法") + 
+  ylab("因子权重") +
+  theme_minimal() +
+  theme(legend.position = "right", text = element_text(size = 14)) +
+  scale_fill_manual(values = c("#E4CDA7", "#C6DEF1", "#BFD8AF"))  # 颜色设置
+```
+### 提琴图
+先进行数据提取与清洗
+```{r violin}
+df <- read_excel(file_path, sheet=6)
+# 使用正则表达式拆分 "前20要素（要素出现频率）" 列
+# 1. 先拆分 "前20要素（要素出现频率）" 列，提取所有的 "要素名称" 和 "出现频率"
+df_clean <- df %>%
+  mutate(要素列表 = strsplit(`前20要素（要素出现频率）`, "(?<=\\))", perl = TRUE)) %>%  # 按右括号拆分
+  unnest(要素列表) %>%  # 展开为多行
+  mutate(
+    要素名称 = str_extract(要素列表, "[\u4e00-\u9fa5]+"),  # 提取中文部分
+    出现频率 = str_extract(要素列表, "\\d+") %>% as.numeric()  # 提取数字部分
+  ) %>%
+  select(-要素列表)  # 删除拆分中间列
+# **去除 NA 行**
+df_clean <- df_clean %>% filter(!is.na(小类))
+
+# 查看数据
+print(df_clean)
+
+```
+
+```{r,}
+
+# **对 “出现频率” 进行标准化 (Z-score 标准化)**
+df_clean <- df_clean %>%
+  mutate(标准化 = (出现频率 - mean(出现频率, na.rm = TRUE)) / sd(出现频率, na.rm = TRUE))
+
+
+
+# 选取前7个独立的小类
+top7_classes <- df_clean %>%
+  distinct(小类) %>%  # 确保小类唯一
+  slice_head(n = 6)  # 选取前7个不同的小类
+
+# 过滤数据集，仅保留前7个小类
+df_subset <- df_clean %>%
+  filter(小类 %in% top7_classes$小类)
+df_subset <- df_subset %>% filter(row_number() != 1 | !is.na(小类))
+
+# 选取第 8-14 个小类的数据
+df_subset <- df_clean %>%
+  filter(小类 %in% unique(小类)[1:6])
+
+
+```
+最后进行提琴可视化展示
+```{r}
+# 设置莫兰迪色系
+morandi_colors <- c("#A8B5C3", "#C9A9A6", "#D6C6B4", "#B5C4B1", "#E8D0A9", "#A3C1AD", "#C0B2B5")
+# 绘制提琴图
+ggplot(df_subset, aes(x = 小类, y = 出现频率, fill = 小类)) +
+  geom_violin(trim = FALSE, alpha = 0.8, width =1.2,aes(linetype = NA)) +  # 提琴图
+  geom_jitter(shape = 21, size = 2, position = position_jitter(0.2), color = "black", alpha = 0.6) +  # 让数据点分布得更清晰
+  scale_fill_manual(values = morandi_colors) +  # 设置莫兰迪配色
+  labs(y = "出现频率") +
+  theme_minimal() +  # 极简主题
+  theme(  # 旋转x轴标签
+        axis.text.x = element_text(size = 32,angle = 30, hjust =1),  # **X轴刻度字体大小**
+        axis.text.y = element_text(size = 28),  # **Y轴刻度字体大小**
+        axis.title.x = element_blank(),
+        #axis.title.x = element_text(size = 24), # **X轴标题字体大小**
+        axis.title.y = element_text(size = 26),
+        legend.position = "none")  # 隐藏图例
+```
+
+---
+
+## 6  桑基图示例
+
+### 6.1  三系统 → 管控策略
+
+```{r sankey1}
+ggplot(df2, aes(x = x, next_x = next_x, node=node, next_node=next_node,
+                fill=node, label=node)) +
+  geom_sankey(flow.alpha=.5, smooth=7, width=.1) +
+  geom_sankey_text(size=4) +
+  scale_fill_manual(values = mocol) +
+  theme_void()
+```
+
+### 6.2  因子编号 ↔ 景观风景区
+
+数据清洗+前期处理
+```{r}
+df <- read_excel(file_path, sheet = 3)
+head(df)
+
+library(tidyr)
+
+# 合并三列到一列
+df_long <- df %>%
+  pivot_longer(cols = starts_with("主要景观类型（编号/编号/…）"),
+               names_to = "景观类型编号",  # 新列名称
+               values_to = "景观类型值")  # 新列值
+
+# 查看结果
+head(df_long)
+# 删除"景观类型值"为NA的行，并删除"景观类型编号"列
+df_long <- df_long %>%
+  filter(!is.na(景观类型值)) %>%  # 删除景观类型值为NA的行
+  select(-景观类型编号)  # 删除景观类型编号列
+# 确保所有列都没有重复值
+df_long_clean <- df_long %>%
+  distinct(景观风貌区, 主要特征区域编号, 景观类型值,编号, 因子类型, 因子种类) %>%
+  filter(!is.na(景观类型值))
+```
+```{r}
+df1 <- to_lodes_form(df_long_clean, axes = 1:6, id = "value")
+head(df1)
+df1$stratum <- factor(df1$stratum, levels = unique(c(
+  rev(unique(df_long_clean$景观风貌区)),
+  rev(unique(df_long_clean$主要特征区域编号)),
+  rev(unique(df_long_clean$编号)),
+  rev(unique(df_long_clean$景观类型值)),
+  rev(unique(df_long_clean$因子类型)),
+  rev(unique(df_long_clean$因子种类))
+)))
+# 将景观类型值列转换为字符型
+df_long$景观类型值 <- as.character(df_long$景观类型值)
+
+# 使用clean数据重新生成df2
+df2 <- df_long_clean %>% make_long("景观风貌区", "主要特征区域编号", "景观类型值", "编号","因子类型","因子种类" )
+
+# 更新因子级别
+df2$node <- factor(df2$node, levels = c(rev(unique(df_long$景观风貌区)),
+                                        rev(unique(df_long$主要特征区域编号)),
+                                        rev(unique(df_long$编号)),
+                                        rev(unique(df_long$景观类型值)),
+                                        rev(unique(df_long$因子类型)),
+                                        rev(unique(df_long$因子种类))))
+df2$node <- factor(df2$node, levels = unique(c(
+  rev(unique(df_long$景观风貌区)),
+  rev(unique(df_long$主要特征区域编号)),
+  rev(unique(df_long$编号)),
+  rev(unique(df_long$景观类型值)),
+  rev(unique(df_long$因子类型)),
+  rev(unique(df_long$因子种类))
+)))
+```
+
+
+```{r sankey2}
+ggplot(df1, aes(x = x, fill=stratum, label=stratum,
+               stratum = stratum, alluvium  = value))+#数据
+  geom_flow(width = 0.2,#连线宽度
+            curve_type = "sine",#曲线形状，有linear、cubic、quintic、sine、arctangent、sigmoid几种类型可供调整
+            alpha = 0.8,#透明度
+            color = 'white',#间隔颜色
+            size = 0.05)+#间隔宽度
+  geom_stratum(width = 0.2)+#图中方块的宽度
+  geom_text(stat = 'stratum', size = 3,color = 'black')+
+  scale_fill_manual(values = mocol)+#自定义颜色
+  theme_void()+#主题（无轴及网格线）
+  theme(legend.position = 'none')#去除图例
+```
+
+---
+
+## 7  结语
+
+以上示例涵盖相关性热力图、层次聚类与多种桑基图，可作为 GIS/统计可视化的模板。如有问题或改进建议，欢迎提出！
