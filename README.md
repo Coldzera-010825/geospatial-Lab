@@ -21,7 +21,6 @@ Here I archive anything that helped me learn or explain spatial analysis & mappi
 
 > *Heads-up:* projects are in various stages of polish—feel free to borrow ideas, but mind the rough edges. 🙂
 
-## How to navigate
-
-Each sub-folder is **one self-contained project**:
+Happy mapping!  
+— **cold**
 
